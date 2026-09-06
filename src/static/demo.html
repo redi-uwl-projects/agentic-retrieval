@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hybrid Agentic Retrieval — Live Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+        margin: 0;
+        padding: 2rem;
+        background: #f7f7f8;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 1.3rem;
+        margin: 0 0 0.25rem;
+      }
+      .sub {
+        color: #666;
+        margin: 0 0 1.5rem;
+        font-size: 0.9rem;
+      }
+      .bar {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+      }
+      input[type="text"] {
+        flex: 1;
+        padding: 0.7rem 0.9rem;
+        font-size: 1rem;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      }
+      button {
+        padding: 0.7rem 1.3rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: #94a3b8;
+        cursor: default;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+      }
+      .card {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .card h2 {
+        font-size: 0.95rem;
+        margin: 0 0 0.6rem;
+        display: flex;
+        justify-content: space-between;
+      }
+      .lat {
+        font-weight: normal;
+        color: #888;
+        font-size: 0.8rem;
+      }
+      .doc {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+        font-size: 0.85rem;
+      }
+      .doc:last-child {
+        border-bottom: none;
+      }
+      .docid {
+        font-weight: 600;
+        color: #2563eb;
+      }
+      .snippet {
+        color: #444;
+        margin-top: 0.15rem;
+      }
+      .trace {
+        margin-top: 1.5rem;
+      }
+      .stage {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .stage h3 {
+        margin: 0 0 0.4rem;
+        font-size: 0.9rem;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+      }
+      .badge.ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .badge.no {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .badge.rel {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .badge.notrel {
+        background: #f1f5f9;
+        color: #64748b;
+      }
+      .qbar {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        align-items: center;
+      }
+      .qbar select {
+        flex: 1;
+        padding: 0.5rem 0.7rem;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-size: 0.85rem;
+      }
+      .qbar label {
+        font-size: 0.8rem;
+        color: #666;
+        white-space: nowrap;
+      }
+      .qrels-summary {
+        font-size: 0.8rem;
+        color: #444;
+        margin: -1rem 0 1rem;
+      }
+      .meta {
+        color: #666;
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+      }
+      .plan {
+        background: #eff6ff;
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+        margin-bottom: 0.75rem;
+        font-size: 0.88rem;
+      }
+      .loading {
+        color: #888;
+        font-style: italic;
+      }
+      .err {
+        color: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hybrid Agentic Retrieval — Live Demo</h1>
+    <p class="sub" id="status">connecting...</p>
+
+    <div class="qbar">
+      <label for="qidSelect">Known eval query (w/ qrels):</label>
+      <select id="qidSelect">
+        <option value="">— free text (no qrels check) —</option>
+      </select>
+    </div>
+
+    <div class="bar">
+      <input type="text" id="q" placeholder="Type a query and press Enter..." />
+      <button id="go">Run query</button>
+    </div>
+
+    <p class="qrels-summary" id="qrelsSummary"></p>
+    <div class="cols" id="results"></div>
+    <div class="trace" id="trace"></div>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const resultsEl = document.getElementById("results");
+      const traceEl = document.getElementById("trace");
+      const qrelsSummaryEl = document.getElementById("qrelsSummary");
+      const qEl = document.getElementById("q");
+      const goBtn = document.getElementById("go");
+      const qidSelectEl = document.getElementById("qidSelect");
+
+      // Set when the user picks a known eval query from the dropdown; cleared as
+      // soon as they hand-edit the text box, since free text has no qrels to check.
+      let selectedQid = "";
+
+      async function loadHealth() {
+        try {
+          const r = await fetch("/health");
+          const h = await r.json();
+          if (h.status === "ready") {
+            statusEl.textContent = `Dataset: ${h.dataset} (${h.corpus_size.toLocaleString()} docs) | LLM: ${h.llm} | max_refine: ${h.max_refine}`;
+            loadQueries();
+          } else {
+            statusEl.textContent = "Index/model still loading -- retrying...";
+            setTimeout(loadHealth, 3000);
+          }
+        } catch (e) {
+          statusEl.textContent = "Waiting for API to come up...";
+          setTimeout(loadHealth, 3000);
+        }
+      }
+      loadHealth();
+
+      async function loadQueries() {
+        try {
+          const r = await fetch("/queries?limit=300");
+          if (!r.ok) return;
+          const items = await r.json();
+          for (const it of items) {
+            const opt = document.createElement("option");
+            opt.value = it.qid;
+            const preview =
+              it.text.length > 80 ? it.text.slice(0, 80) + "…" : it.text;
+            opt.textContent = `[${it.qid}] ${preview} (${it.num_relevant} relevant)`;
+            opt.dataset.text = it.text;
+            qidSelectEl.appendChild(opt);
+          }
+        } catch (e) {
+          // Non-fatal -- free-text queries still work without qrels checking.
+        }
+      }
+
+      qidSelectEl.addEventListener("change", () => {
+        selectedQid = qidSelectEl.value;
+        if (selectedQid) {
+          qEl.value = qidSelectEl.selectedOptions[0].dataset.text;
+        }
+      });
+      qEl.addEventListener("input", () => {
+        selectedQid = "";
+      });
+
+      function relBadge(h) {
+        if (h.is_relevant === null || h.is_relevant === undefined) return "";
+        return h.is_relevant
+          ? `<span class="badge rel">relevant (grade ${h.relevance})</span>`
+          : `<span class="badge notrel">not in qrels</span>`;
+      }
+
+      function docCard(title, hits, latencyMs) {
+        const lat =
+          latencyMs !== undefined
+            ? `<span class="lat">${latencyMs} ms</span>`
+            : "";
+        const rows =
+          (hits || [])
+            .map(
+              (h) =>
+                `<div class="doc"><span class="docid">${h.doc_id}</span> (${h.score.toFixed(3)}) ${relBadge(h)}
+     <div class="snippet">${escapeHtml(h.snippet)}</div></div>`,
+            )
+            .join("") || '<div class="doc">no results</div>';
+        return `<div class="card"><h2>${title} ${lat}</h2>${rows}</div>`;
+      }
+
+      function escapeHtml(s) {
+        return (s || "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+
+      function traceHtml(exp) {
+        if (!exp) return "";
+        const plan = `<div class="plan"><strong>Plan:</strong> tools = [${exp.tools_chosen.join(", ")}] &mdash; "${escapeHtml(exp.plan_reasoning)}"</div>`;
+        const subq =
+          exp.subqueries && exp.subqueries.length
+            ? `<div class="plan"><strong>Decomposed into:</strong> ${exp.subqueries
+                .map(escapeHtml)
+                .map((s) => `&ldquo;${s}&rdquo;`)
+                .join(", ")}</div>`
+            : "";
+        const stages = exp.stages
+          .map((s) => {
+            let badge = "";
+            if (s.judge_sufficient === true)
+              badge = '<span class="badge ok">sufficient</span>';
+            if (s.judge_sufficient === false)
+              badge = '<span class="badge no">insufficient</span>';
+            return `<div class="stage">
+      <h3>Stage ${s.stage}${badge}</h3>
+      <div><em>Query:</em> ${escapeHtml(s.query)}</div>
+      <div><em>Top docs:</em> ${s.top_docs.join(", ")}</div>
+      ${s.judge_reasoning ? `<div><em>Judge:</em> ${escapeHtml(s.judge_reasoning)}</div>` : ""}
+    </div>`;
+          })
+          .join("");
+        const meta = `<div class="meta">Stopped: ${exp.stop_reason} | refinements: ${exp.n_refinements} |
+    total: ${exp.total_time_ms} ms | LLM calls this query: ${exp.llm_calls_this_query}</div>`;
+        return plan + subq + stages + meta;
+      }
+
+      async function runQuery() {
+        const q = qEl.value.trim();
+        if (!q) return;
+        goBtn.disabled = true;
+        resultsEl.innerHTML = '<p class="loading">Running query...</p>';
+        traceEl.innerHTML = "";
+        qrelsSummaryEl.textContent = "";
+        try {
+          const r = await fetch("/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: q,
+              top_k: 5,
+              conditions: [
+                "bm25",
+                "dense",
+                "keyword",
+                "tfidf",
+                "glove",
+                "agentic",
+              ],
+              qid: selectedQid || null,
+            }),
+          });
+          if (!r.ok) {
+            const err = await r.text();
+            resultsEl.innerHTML = `<p class="err">Error ${r.status}: ${escapeHtml(err)}</p>`;
+            return;
+          }
+          const data = await r.json();
+          resultsEl.innerHTML =
+            docCard("BM25", data.bm25, data.latency_ms.bm25) +
+            docCard("Dense Search", data.dense, data.latency_ms.dense) +
+            docCard("Keyword Search", data.keyword, data.latency_ms.keyword) +
+            docCard("TF-IDF", data.tfidf, data.latency_ms.tfidf) +
+            docCard(
+              "Word Embeddings (GloVe)",
+              data.glove,
+              data.latency_ms.glove,
+            ) +
+            docCard("Agentic Search", data.agentic, data.latency_ms.agentic);
+          traceEl.innerHTML = traceHtml(data.agentic_explanation);
+          qrelsSummaryEl.textContent = data.qrels_available
+            ? `qrels: ${data.num_relevant_in_qrels} doc(s) judged relevant for this query (qid=${selectedQid})`
+            : "qrels: no known relevance judgments for this query (pick one from the dropdown above to check)";
+        } catch (e) {
+          resultsEl.innerHTML = `<p class="err">Request failed: ${escapeHtml(String(e))}</p>`;
+        } finally {
+          goBtn.disabled = false;
+        }
+      }
+
+      goBtn.addEventListener("click", runQuery);
+      qEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") runQuery();
+      });
+    </script>
+  </body>
+</html>

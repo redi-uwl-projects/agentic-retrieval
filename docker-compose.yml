@@ -1,0 +1,91 @@
+# commands to run the agentic-retrieval service in a container, with GPU access:
+# docker compose build
+# docker compose run --rm agentic-retrieval
+# docker compose build --no-cache
+# docker compose up --build --no-deps --force-recreate
+
+services:
+  agentic-retrieval:
+    build: .
+    image: agentic-retrieval:latest
+    gpus: all
+    command:
+      - "--dataset-source=${DATASET_SOURCE:-bright}"
+      - "--dataset-name=${DATASET_NAME:-psychology}"
+      - "--split=${SPLIT:-test}"
+      - "--corpus-subset-size=${CORPUS_SUBSET_SIZE:-20000}"
+      - "--max-queries=${MAX_QUERIES:-100}"
+      - "--top-k-retrieve=${TOP_K_RETRIEVE:-100}"
+      - "--llm-name=${LLM_NAME:-Qwen/Qwen2.5-3B-Instruct}"
+      - "--llm-backend=${LLM_BACKEND:-transformers}"
+      - "--ollama-host=${OLLAMA_HOST:-http://host.docker.internal:11434}"
+      - "--ollama-model=${OLLAMA_MODEL:-qwen2.5:1.5b}"
+      - "--dense-model=${DENSE_MODEL:-multi-qa-MiniLM-L6-cos-v1}"
+      - "--cross-encoder-name=${CROSS_ENCODER_NAME:-cross-encoder/ms-marco-MiniLM-L-6-v2}"
+      - "--max-refine=${MAX_REFINE:-2}"
+      - "--seed=${SEED:-42}"
+      - "--output-dir=/app/outputs"
+      - "--log-level=${LOG_LEVEL:-INFO}"
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ./outputs:/app/outputs
+      - hf-cache:/app/.cache/huggingface
+      - ir-datasets-cache:/app/.cache/ir_datasets
+      - gensim-cache:/app/.cache/gensim-data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    tty: true
+    stdin_open: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # lets --ollama-host reach Ollama on the Windows/Linux host
+
+  # Live Demo API
+  agentic-api:
+    build: .
+    image: agentic-retrieval:latest
+    gpus: all
+    entrypoint: ["python", "api_server.py"]
+    command:
+      - "--dataset-source=${DATASET_SOURCE:-bright}"
+      - "--dataset-name=${DATASET_NAME:-psychology}"
+      - "--split=${SPLIT:-test}"
+      - "--corpus-subset-size=${CORPUS_SUBSET_SIZE:-20000}"
+      - "--llm-name=${LLM_NAME:-Qwen/Qwen2.5-3B-Instruct}"
+      - "--llm-backend=${LLM_BACKEND:-transformers}"
+      - "--ollama-host=${OLLAMA_HOST:-http://host.docker.internal:11434}"
+      - "--ollama-model=${OLLAMA_MODEL:-qwen2.5:1.5b}"
+      - "--dense-model=${DENSE_MODEL:-multi-qa-MiniLM-L6-cos-v1}"
+      - "--cross-encoder-name=${CROSS_ENCODER_NAME:-cross-encoder/ms-marco-MiniLM-L-6-v2}"
+      - "--max-refine=${MAX_REFINE:-2}"
+      - "--seed=${SEED:-42}"
+      - "--log-level=${LOG_LEVEL:-INFO}"
+      - "--host=0.0.0.0"
+      - "--port=8000"
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf-cache:/app/.cache/huggingface
+      - ir-datasets-cache:/app/.cache/ir_datasets
+      - gensim-cache:/app/.cache/gensim-data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  hf-cache:
+  ir-datasets-cache:
+  gensim-cache:

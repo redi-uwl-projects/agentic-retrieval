@@ -1,0 +1,27 @@
+# torch / torchvision / torchaudio are already installed in the
+# pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime base image -- do not list
+# them here, or pip may pull a mismatched CUDA build.
+
+ir_datasets==0.5.9
+rank_bm25==0.2.2
+scikit-learn==1.5.1
+sentence-transformers==3.0.1
+faiss-cpu==1.8.0.post1
+gensim==4.3.3
+pytrec_eval==0.5
+transformers==4.44.2
+accelerate==0.33.0
+datasets==2.20.0
+huggingface_hub==0.24.6
+tqdm==4.66.5
+matplotlib==3.9.2
+pandas==2.2.2
+numpy==1.26.4
+sentencepiece==0.2.0
+protobuf==5.27.3
+requests==2.32.3
+
+# Demo API server (api_server.py)
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.8.2
