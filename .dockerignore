@@ -1,0 +1,14 @@
+outputs/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.vscode/
+.idea/
+*.ipynb
+README.md
+scripts/
