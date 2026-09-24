@@ -2,14 +2,18 @@
 
 ## Implemented techniques
 
-1. **Keyword Search** — baseline
-2. **BM25** — baseline
-3. **TD-IF** — baseline
-4. **Word Embeddings** — baseline
-5. **Dense Search** — baseline
-6. **Agentic Search** — LLM plan → retrieve → fuse/re-rank → judge → reformulate → retry, with iterative query self-correction
+1. **Keyword Search** (baseline)
+2. **BM25** (baseline)
+3. **TD-IF** (baseline)
+4. **Word Embeddings** (baseline)
+5. **Dense Search** (baseline)
+6. **Agentic Search** (proposed framework)
+LLM plan → retrieve → fuse/re-rank → judge → reformulate → retry, with iterative query self-correction
 
-## Building the docker image
+## Prepare the .env file
+Edit parameters as shown in .env.example
+
+## Build the docker image
 `docker compose build`
 
 ## Run a batch test
