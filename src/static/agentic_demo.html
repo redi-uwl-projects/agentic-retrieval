@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agentic Search — Step-by-Step Demo</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --ink: #0f172a;
+        --muted: #475569;
+        --line: #dfe7f2;
+        --blue: #2563eb;
+        --blue-soft: #eff6ff;
+        --green: #16a34a;
+        --green-soft: #dcfce7;
+        --red: #dc2626;
+        --red-soft: #fee2e2;
+        --amber: #d97706;
+        --amber-soft: #fef3c7;
+        --shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem;
+        background: var(--bg);
+        font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+        color: var(--ink);
+      }
+      .container {
+        max-width: 1250px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 0.3rem;
+        font-size: clamp(1.5rem, 2vw, 2.1rem);
+      }
+      .sub {
+        margin: 0 0 1.5rem;
+        color: var(--muted);
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .toolbar input[type="text"] {
+        flex: 1;
+        min-width: 260px;
+        padding: 0.8rem 1rem;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        font-size: 1rem;
+        background: #fff;
+      }
+      button {
+        padding: 0.8rem 1.2rem;
+        border: none;
+        border-radius: 12px;
+        background: var(--blue);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: #9aa9c0;
+        cursor: default;
+      }
+      select {
+        min-width: 220px;
+        padding: 0.7rem 0.9rem;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 1.2rem;
+        margin-top: 1.2rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        padding: 1rem 1rem 0.9rem;
+      }
+      .card h2 {
+        margin: 0 0 0.9rem;
+        font-size: 1rem;
+      }
+      .meta-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin-bottom: 1rem;
+      }
+      .pill {
+        display: inline-block;
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+      }
+      .pill.blue { background: var(--blue-soft); color: var(--blue); }
+      .pill.green { background: var(--green-soft); color: var(--green); }
+      .pill.red { background: var(--red-soft); color: var(--red); display:none; }
+      .pill.amber { background: var(--amber-soft); color: var(--amber); }
+      .section-label {
+        color: var(--muted);
+        font-size: 0.75rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+      }
+      .query-box {
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        color: var(--ink);
+        line-height: 1.5;
+        margin-bottom: 1rem;
+      }
+      .subqueries {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+      }
+      .subquery {
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.38rem 0.7rem;
+        font-size: 0.8rem;
+      }
+      .tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+      .tool {
+        display: inline-block;
+        background: #eef2ff;
+        color: #3730a3;
+        border: 1px solid #c7d2fe;
+        border-radius: 999px;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.75rem;
+      }
+      .timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .stage {
+        border-left: 3px solid var(--blue);
+        background: #f8fbff;
+        border-radius: 12px;
+        padding: 0.9rem 1rem 0.9rem 1rem;
+        margin-left: 0.25rem;
+      }
+      .stage.refine {
+        border-left-color: var(--amber);
+      }
+      .stage-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      .stage-name {
+        font-weight: 700;
+      }
+      .judge {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.5;
+        margin-top: 0.5rem;
+      }
+      .doc-list {
+        margin-top: 0.6rem;
+        display: grid;
+        gap: 0.55rem;
+      }
+      .doc-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.6rem 0.7rem;
+        background: white;
+        cursor: pointer;
+      }
+      .doc-item:hover, .doc-item:focus-visible { border-color: var(--blue); }
+      .doc-id {
+        font-weight: 700;
+        color: var(--blue);
+        font-size: 0.82rem;
+      }
+      .doc-snippet {
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin-top: 0.2rem;
+        line-height: 1.45;
+      }
+      .full-document {
+        display: none;
+        margin-top: 0.65rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid var(--line);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: var(--ink);
+        font-size: 0.82rem;
+        line-height: 1.55;
+      }
+      .doc-item.expanded .full-document { display: block; }
+      .doc-item.loading .full-document { display: block; color: var(--muted); }
+      .empty {
+        color: var(--muted);
+        font-style: italic;
+        font-size: 0.82rem;
+      }
+      .none {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .err {
+        color: var(--red);
+      }
+      .loading {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .prompt-log {
+        display: grid;
+        gap: 0.8rem;
+      }
+      .prompt-entry {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .prompt-entry-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.65rem 0.75rem;
+        background: #f8fafc;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+      .prompt-part {
+        padding: 0.7rem 0.75rem;
+      }
+      .prompt-part + .prompt-part {
+        border-top: 1px solid var(--line);
+      }
+      .prompt-part-label {
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+      }
+      .prompt-text {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: 0.78rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+        color: var(--ink);
+      }
+      @media (max-width: 920px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Agentic Search — Step-by-Step</h1>
+      <p class="sub" id="status">connecting...</p>
+
+      <div class="toolbar">
+        <select id="qidSelect">
+          <option value="">— free text (no qrels check) —</option>
+        </select>
+        <input id="queryInput" type="text" placeholder="Ask a complex question to see how it is decomposed and refined..." />
+        <button id="runBtn">Run agentic search</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Query flow</h2>
+          <div id="flow"></div>
+        </div>
+
+        <div class="card">
+          <h2>Final results</h2>
+          <div id="finalResults"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 1.2rem;">
+        <h2>LLM prompt log</h2>
+        <div id="promptLog"><div class="empty">Run a query to inspect the prompts sent to the LLM.</div></div>
+      </div>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const qidSelectEl = document.getElementById('qidSelect');
+      const queryInputEl = document.getElementById('queryInput');
+      const runBtn = document.getElementById('runBtn');
+      const flowEl = document.getElementById('flow');
+      const finalResultsEl = document.getElementById('finalResults');
+      const promptLogEl = document.getElementById('promptLog');
+      let selectedQid = '';
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[char]));
+      }
+
+      async function loadHealth() {
+        try {
+          const r = await fetch('/health');
+          const health = await r.json();
+          if (health.status === 'ready') {
+            statusEl.textContent = `Dataset: ${health.dataset} | LLM: ${health.llm} | max_refine: ${health.max_refine}`;
+            await loadQueries();
+          } else {
+            statusEl.textContent = 'Index/model still loading...';
+            setTimeout(loadHealth, 2000);
+          }
+        } catch (error) {
+          statusEl.textContent = 'Waiting for the API to come up...';
+          setTimeout(loadHealth, 2000);
+        }
+      }
+
+      async function loadQueries() {
+        try {
+          const r = await fetch('/queries?limit=300');
+          if (!r.ok) return;
+          const items = await r.json();
+          for (const item of items) {
+            const opt = document.createElement('option');
+            opt.value = item.qid;
+            const preview = item.text.length > 90 ? item.text.slice(0, 90) + '…' : item.text;
+            opt.textContent = `[${item.qid}] ${preview}`;
+            opt.dataset.text = item.text;
+            qidSelectEl.appendChild(opt);
+          }
+        } catch (error) {
+          // Free-text queries still work without qrels data.
+        }
+      }
+
+      qidSelectEl.addEventListener('change', () => {
+        selectedQid = qidSelectEl.value;
+        if (selectedQid) {
+          queryInputEl.value = qidSelectEl.selectedOptions[0].dataset.text || '';
+        }
+      });
+
+      function renderFinalResults(data) {
+        if (!data || !data.agentic) {
+          finalResultsEl.innerHTML = '<div class="empty">No agentic results yet.</div>';
+          return;
+        }
+
+        const rows = data.agentic.map((hit, index) => `
+          <div class="doc-item" data-doc-id="${escapeHtml(hit.doc_id)}" tabindex="0" role="button" aria-expanded="false">
+            <div class="doc-id">#${index + 1} ${escapeHtml(hit.doc_id)}</div>
+            <div class="doc-snippet">Score: ${Number(hit.score).toFixed(3)}${hit.is_relevant !== null && hit.is_relevant !== undefined ? ` • ${hit.is_relevant ? 'relevant' : ''}` : ''}<br>${escapeHtml(hit.snippet)}</div>
+            <div class="full-document"></div>
+          </div>
+        `).join('');
+
+        finalResultsEl.innerHTML = `
+          <div class="meta-line">
+            <span class="pill blue">${data.latency_ms.agentic ?? 0} ms</span>
+            <span class="pill green">LLM calls: ${data.agentic_explanation?.llm_calls_this_query ?? 0}</span>
+            <span class="pill amber">Refinements: ${data.agentic_explanation?.n_refinements ?? 0}</span>
+          </div>
+          ${rows || '<div class="empty">No results returned.</div>'}
+        `;
+      }
+
+      async function toggleFullDocument(item) {
+        const fullDocumentEl = item.querySelector('.full-document');
+        if (item.classList.contains('expanded')) {
+          item.classList.remove('expanded');
+          item.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        if (fullDocumentEl.dataset.loaded === 'true') {
+          item.classList.add('expanded');
+          item.setAttribute('aria-expanded', 'true');
+          return;
+        }
+
+        item.classList.add('loading');
+        fullDocumentEl.textContent = 'Loading full paragraph...';
+        try {
+          const response = await fetch(`/documents/${encodeURIComponent(item.dataset.docId)}`);
+          if (!response.ok) throw new Error(await response.text());
+          const document = await response.json();
+          fullDocumentEl.textContent = document.text;
+          fullDocumentEl.dataset.loaded = 'true';
+          item.classList.add('expanded');
+          item.setAttribute('aria-expanded', 'true');
+        } catch (error) {
+          fullDocumentEl.textContent = `Could not load the full paragraph: ${error.message || error}`;
+        } finally {
+          item.classList.remove('loading');
+        }
+      }
+
+      finalResultsEl.addEventListener('click', (event) => {
+        const item = event.target.closest('.doc-item[data-doc-id]');
+        if (item) toggleFullDocument(item);
+      });
+
+      finalResultsEl.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const item = event.target.closest('.doc-item[data-doc-id]');
+        if (!item) return;
+        event.preventDefault();
+        toggleFullDocument(item);
+      });
+
+      function renderFlow(data) {
+        const exp = data?.agentic_explanation;
+        if (!exp) {
+          flowEl.innerHTML = '<div class="empty">Run a query to inspect the agentic flow.</div>';
+          return;
+        }
+
+        const decompositionReasoning = exp.decomposition_reasoning
+          ? `<div class="section-label">Decomposition rationale</div><div class="query-box">${escapeHtml(exp.decomposition_reasoning)}</div>`
+          : '';
+
+        const subqueries = exp.subqueries && exp.subqueries.length
+          ? `<div class="section-label">Subqueries</div><div class="subqueries">${exp.subqueries.map((sq) => `<span class="subquery">${escapeHtml(sq)}</span>`).join('')}</div>`
+          : '<div class="none">No decomposition was needed for this query.</div>';
+
+        const tools = `<div class="section-label">Planning</div><div class="tools">${exp.tools_chosen.map((tool) => `<span class="tool">${escapeHtml(tool)}</span>`).join('')}</div>`;
+
+        const planReasoning = exp.plan_reasoning
+          ? `<div class="query-box" style="margin-top: 0.8rem;">${escapeHtml(exp.plan_reasoning)}</div>`
+          : '';
+
+        const stages = exp.stages.map((stage) => {
+          const stageClass = stage.stage > 0 ? 'stage refine' : 'stage';
+          const judgeBadge = stage.judge_sufficient === true
+            ? '<span class="pill green">sufficient</span>'
+            : stage.judge_sufficient === false
+              ? '<span class="pill red">insufficient</span>'
+              : '<span class="pill amber">pending</span>';
+
+          const docs = stage.top_docs && stage.top_docs.length
+            ? stage.top_docs.map((docId) => `<div class="doc-item"><div class="doc-id">${escapeHtml(docId)}</div></div>`).join('')
+            : '<div class="empty">No docs in this stage.</div>';
+
+          return `
+            <div class="${stageClass}">
+              <div class="stage-header">
+                <div class="stage-name">Stage ${stage.stage}</div>
+                ${judgeBadge}
+              </div>
+              <div class="section-label">Query</div>
+              <div class="query-box">${escapeHtml(stage.query)}</div>
+              <div class="section-label">Top-ranked docs</div>
+              <div class="doc-list">${docs}</div>
+              <div class="judge"><strong>Judge:</strong> ${escapeHtml(stage.judge_reasoning || 'No judge reasoning was returned.')}</div>
+            </div>
+          `;
+        }).join('');
+
+        flowEl.innerHTML = `
+          <div class="query-box"><strong>Original query:</strong> ${escapeHtml(data.query)}</div>
+          ${decompositionReasoning}
+          ${subqueries}
+          ${tools}
+          ${planReasoning}
+          <div class="meta-line" style="margin-top: 1rem;">
+            <span class="pill blue">Stop reason: ${escapeHtml(exp.stop_reason)}</span>
+            <span class="pill green">Total time: ${Number(exp.total_time_ms).toFixed(1)} ms</span>
+          </div>
+          <div class="timeline" style="margin-top: 1rem;">${stages}</div>
+        `;
+      }
+
+      function renderPromptLog(data) {
+        const prompts = data?.agentic_explanation?.prompt_log || [];
+        if (!prompts.length) {
+          promptLogEl.innerHTML = '<div class="empty">No LLM prompts were recorded.</div>';
+          return;
+        }
+
+        promptLogEl.innerHTML = `<div class="prompt-log">${prompts.map((entry) => `
+          <div class="prompt-entry">
+            <div class="prompt-entry-header">
+              <span>Call ${entry.call}: ${escapeHtml(entry.phase)}</span>
+              <span class="pill blue">LLM input</span>
+            </div>
+            <div class="prompt-part">
+              <div class="prompt-part-label">System prompt</div>
+              <pre class="prompt-text">${escapeHtml(entry.system_prompt)}</pre>
+            </div>
+            <div class="prompt-part">
+              <div class="prompt-part-label">User prompt</div>
+              <pre class="prompt-text">${escapeHtml(entry.user_prompt)}</pre>
+            </div>
+          </div>
+        `).join('')}</div>`;
+      }
+
+      async function runAgenticQuery() {
+        const q = queryInputEl.value.trim();
+        if (!q) return;
+
+        runBtn.disabled = true;
+        flowEl.innerHTML = '<div class="loading">Running the agentic search flow...</div>';
+        finalResultsEl.innerHTML = '<div class="loading">Gathering results...</div>';
+        promptLogEl.innerHTML = '<div class="loading">Recording LLM prompts...</div>';
+
+        try {
+          const response = await fetch('/query/agentic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: q,
+              top_k: 5,
+              qid: selectedQid || null,
+              conditions: ['agentic']
+            })
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            flowEl.innerHTML = `<div class="err">Request failed: ${escapeHtml(text)}</div>`;
+            finalResultsEl.innerHTML = '';
+            return;
+          }
+
+          const data = await response.json();
+          renderFlow(data);
+          renderFinalResults(data);
+          renderPromptLog(data);
+        } catch (error) {
+          flowEl.innerHTML = `<div class="err">Request failed: ${escapeHtml(String(error))}</div>`;
+          finalResultsEl.innerHTML = '';
+        } finally {
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener('click', runAgenticQuery);
+      queryInputEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') runAgenticQuery();
+      });
+
+      loadHealth();
+    </script>
+  </body>
+</html>

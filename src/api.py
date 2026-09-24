@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger("agentic_retrieval.api")
 
 DEMO_HTML_PATH = Path(__file__).parent / "static" / "demo.html"
+AGENTIC_DEMO_HTML_PATH = Path(__file__).parent / "static" / "agentic_demo.html"
 
 app = FastAPI(
     title="Hybrid Agentic Retrieval — Demo API",
@@ -79,15 +80,24 @@ class StageTrace(BaseModel):
     judge_reasoning: str
 
 
+class PromptLogEntry(BaseModel):
+    call: int
+    phase: str
+    system_prompt: str
+    user_prompt: str
+
+
 class AgenticExplanation(BaseModel):
     tools_chosen: list[str]
     plan_reasoning: str
+    decomposition_reasoning: Optional[str] = None
     subqueries: list[str]
     stages: list[StageTrace]
     stop_reason: str
     n_refinements: int
     total_time_ms: float
     llm_calls_this_query: int
+    prompt_log: list[PromptLogEntry]
 
 
 class QueryResponse(BaseModel):
@@ -106,12 +116,21 @@ class QueryResponse(BaseModel):
     num_relevant_in_qrels: Optional[int] = Field(
         None, description="Total number of docs judged relevant for this qid, when qrels_available."
     )
+    search_comparison_html: Optional[str] = Field(
+        None,
+        description="An optional HTML bar chart showing which search condition performed best for the current query.",
+    )
 
 
 class QueryInfo(BaseModel):
     qid: str
     text: str
     num_relevant: int
+
+
+class DocumentResponse(BaseModel):
+    doc_id: str
+    text: str
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +158,62 @@ def _hits(
             )
         )
     return hits
+
+
+def _build_search_comparison_chart(
+    hits_by_condition: dict[str, list[DocHit]],
+    qrels_for_q: Optional[dict] = None,
+) -> str:
+    """Return a small HTML bar chart for the condition hits in this query.
+
+    If qrels are available for the selected query id, we compare how many
+    relevant hits each condition returned in the top-k slice. Otherwise we
+    compare the average document score for the returned hits. This keeps the
+    output simple and avoids introducing any new dependency for the demo.
+    """
+    if not hits_by_condition:
+        return ""
+
+    chart_rows = []
+    scores = []
+
+    for condition, hits in hits_by_condition.items():
+        if qrels_for_q is not None:
+            score = sum(1 for h in hits if h.doc_id in qrels_for_q and qrels_for_q.get(h.doc_id, 0) > 0)
+            metric_label = "relevant hits"
+        else:
+            #score = sum(h.score for h in hits) / len(hits) if hits else 0.0
+            score = 0.0
+            metric_label = "no hits" # "avg score"
+        scores.append(float(score))
+        chart_rows.append((condition, score))
+
+    max_score = max(scores) if scores else 0
+    max_score = max_score if max_score > 0 else 1
+
+    chart = [
+        "<div class='search-comparison-chart'>",
+        "<div class='search-comparison-title'>Search comparison</div>",
+        f"<div class='search-comparison-metric'>Metric: {metric_label}</div>",
+        "<div class='comparison-bars'>",
+    ]
+
+    for condition, score in chart_rows:
+        width = 4 if max_score == 0 else max(5, int((score / max_score) * 80))
+        bar = (
+            "<div class='comparison-row'>"
+            f"<span class='comparison-condition'>{condition}</span>"
+            "<span class='comparison-track'>"
+            f"<span class='comparison-fill' style='width:{width}%;'></span>"
+            "</span>"
+            f"<span class='comparison-value'>{score:g}</span>"
+            "</div>"
+        )
+        chart.append(bar)
+
+    chart.append("</div>")
+    chart.append("</div>")
+    return "".join(chart)
 
 
 def _require_ready():
@@ -177,6 +252,16 @@ def queries(limit: int = 200):
     return items[: max(1, min(limit, 2000))]
 
 
+@app.get("/documents/{doc_id:path}", response_model=DocumentResponse)
+def document(doc_id: str):
+    """Return the complete corpus text for a retrieved document."""
+    _require_ready()
+    corpus = STATE["eval_corpus"]
+    if doc_id not in corpus:
+        raise HTTPException(404, f"Document not found: {doc_id}")
+    return DocumentResponse(doc_id=doc_id, text=corpus[doc_id])
+
+
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
     _require_ready()
@@ -205,49 +290,63 @@ def query(req: QueryRequest):
         latency_ms=latency,
         qrels_available=qrels_for_q is not None,
         num_relevant_in_qrels=(sum(1 for r in qrels_for_q.values() if r > 0) if qrels_for_q is not None else None),
-    )
+    ) # type: ignore
+    hits_by_condition: dict[str, list[DocHit]] = {}
 
     if "bm25" in req.conditions:
         t0 = time.perf_counter()
         ranked = bm25_index.search(req.query, req.top_k)
         latency["bm25"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.bm25 = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.bm25 = hits
+        hits_by_condition["bm25"] = hits
 
     if "dense" in req.conditions:
         t0 = time.perf_counter()
         ranked = dense_index.search(req.query, req.top_k)
         latency["dense"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.dense = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.dense = hits
+        hits_by_condition["dense"] = hits
 
     if "keyword" in req.conditions:
         t0 = time.perf_counter()
         ranked = keyword_index.search(req.query, req.top_k)
         latency["keyword"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.keyword = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.keyword = hits
+        hits_by_condition["keyword"] = hits
 
     if "tfidf" in req.conditions:
         t0 = time.perf_counter()
         ranked = tfidf_index.search(req.query, req.top_k)
         latency["tfidf"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.tfidf = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.tfidf = hits
+        hits_by_condition["tfidf"] = hits
 
     if "glove" in req.conditions:
         t0 = time.perf_counter()
         ranked = glove_index.search(req.query, req.top_k)
         latency["glove"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.glove = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.glove = hits
+        hits_by_condition["glove"] = hits
 
     if "agentic" in req.conditions:
         t0 = time.perf_counter()
         llm_calls_before = agent.llm_calls
         ranked = agent.retrieve(req.query, qid=req.qid, top_k=req.top_k)
         latency["agentic"] = round((time.perf_counter() - t0) * 1000, 1)
-        resp.agentic = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        hits = _hits(ranked, corpus, req.top_k, req.max_snippet_chars, qrels_for_q)
+        resp.agentic = hits
+        hits_by_condition["agentic"] = hits
 
         trace = agent.trace_log[-1]
         resp.agentic_explanation = AgenticExplanation(
             tools_chosen=trace["tools"],
             plan_reasoning=trace["plan_reasoning"],
+            decomposition_reasoning=trace.get("decomposition_reasoning"),
             subqueries=trace.get("subqueries", []),
             stages=[
                 StageTrace(
@@ -259,15 +358,28 @@ def query(req: QueryRequest):
                 )
                 for s in trace["stages"]
             ],
+            prompt_log=trace.get("prompt_log", []),
             stop_reason=trace["stop_reason"],
             n_refinements=trace["n_refinements"],
             total_time_ms=round(trace["total_time"] * 1000, 1),
             llm_calls_this_query=agent.llm_calls - llm_calls_before,
         )
 
+    resp.search_comparison_html = _build_search_comparison_chart(hits_by_condition, qrels_for_q)
     return resp
+
+
+@app.post("/query/agentic", response_model=QueryResponse)
+def query_agentic(req: QueryRequest):
+    req.conditions = ["agentic"]
+    return query(req)
 
 
 @app.get("/", response_class=HTMLResponse)
 def demo_ui():
     return DEMO_HTML_PATH.read_text(encoding="utf-8")
+
+
+@app.get("/agentic-demo", response_class=HTMLResponse)
+def agentic_demo_ui():
+    return AGENTIC_DEMO_HTML_PATH.read_text(encoding="utf-8")

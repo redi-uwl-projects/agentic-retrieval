@@ -101,11 +101,21 @@ class AgenticRetriever:
         self.llm_calls = 0
         self.judge_calls = 0
         self.decompose_calls = 0
+        self.decomposition_reasoning = ""
+        self.prompt_log: list[dict] = []
 
     # ---------- LLM Conversation ----------
 
-    def _call_llm(self, system_prompt: str, user_msg: str) -> str:
+    def _call_llm(self, system_prompt: str, user_msg: str, phase: str) -> str:
         self.llm_calls += 1
+        self.prompt_log.append(
+            {
+                "call": self.llm_calls,
+                "phase": phase,
+                "system_prompt": system_prompt,
+                "user_prompt": user_msg,
+            }
+        )
         return self.llm_backend.generate(system_prompt, user_msg, self.max_new_tokens)
 
     def _parse_json(self, text: str, fallback: dict) -> dict:
@@ -131,11 +141,13 @@ class AgenticRetriever:
 
         #  Returning [] means going back to single-query behaviour.
         if not self.enable_decomposition:
+            self.decomposition_reasoning = "decomposition disabled"
             return []
 
-        raw = self._call_llm(DECOMPOSE_SYSTEM_PROMPT, f"Query: {query}")
+        raw = self._call_llm(DECOMPOSE_SYSTEM_PROMPT, f"Query: {query}", "decomposition")
         self.decompose_calls += 1
-        parsed = self._parse_json(raw, {"subqueries": []})
+        parsed = self._parse_json(raw, {"subqueries": [], "reasoning": "fallback"})
+        self.decomposition_reasoning = str(parsed.get("reasoning", "")).strip() or "no decomposition reasoning"
 
         seen = {query.strip().lower()}
         subqueries = []
@@ -147,7 +159,7 @@ class AgenticRetriever:
         return subqueries[: self.max_subqueries]
 
     def _plan(self, query: str) -> dict:
-        raw = self._call_llm(PLAN_SYSTEM_PROMPT, f"Query: {query}")
+        raw = self._call_llm(PLAN_SYSTEM_PROMPT, f"Query: {query}", "planning")
         plan = self._parse_json(
             raw, {"tools": ["bm25_search", "dense_search", "rrf_fuse"], "reasoning": "fallback"}
         )
@@ -186,7 +198,7 @@ class AgenticRetriever:
 
     def _judge(self, query: str, ranked_ids: list[str]) -> dict:
         user_msg = f"Query: {query}\n\nTop retrieved documents:\n{self._snippets(ranked_ids)}"
-        raw = self._call_llm(JUDGE_SYSTEM_PROMPT, user_msg)
+        raw = self._call_llm(JUDGE_SYSTEM_PROMPT, user_msg, "judge_and_reformulation")
         self.judge_calls += 1
         return self._parse_json(
             raw, {"sufficient": True, "reformulated_query": "", "reasoning": "parse failure -> stop"}
@@ -196,12 +208,12 @@ class AgenticRetriever:
 
     def retrieve(self, query: str, qid=None, top_k: int = 100) -> dict:
         t_start = time.perf_counter()
+        self.prompt_log = []
 
 
         # Decompose
         subqueries = self._decompose(query)
         search_queries = [query] + subqueries  # original query is always included
-
 
         # Plan the tool selection
         plan = self._plan(query)
@@ -220,9 +232,11 @@ class AgenticRetriever:
             "qid": qid,
             "original_query": query,
             "subqueries": subqueries,
+            "decomposition_reasoning": self.decomposition_reasoning,
             "tools": tool_names,
             "plan_reasoning": str(plan.get("reasoning", ""))[:200],
             "plan_parse_ok": plan.get("parse_ok", False),
+            "prompt_log": list(self.prompt_log),
             "stages": [
                 {
                     "stage": 0,
@@ -283,6 +297,7 @@ class AgenticRetriever:
             if trace["stop_reason"] is None:
                 trace["stop_reason"] = "max_steps"
 
+        trace["prompt_log"] = list(self.prompt_log)
         trace["total_time"] = time.perf_counter() - t_start
         self.trace_log.append(trace)
 

@@ -85,6 +85,53 @@
       .doc:last-child {
         border-bottom: none;
       }
+      .search-comparison-chart {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .search-comparison-title {
+        font-weight: 700;
+        font-size: 0.95rem;
+        margin-bottom: 0.3rem;
+      }
+      .search-comparison-metric {
+        color: #666;
+        font-size: 0.8rem;
+        margin-bottom: 0.8rem;
+      }
+      .comparison-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0.35rem 0;
+        font-size: 0.82rem;
+      }
+      .comparison-condition {
+        min-width: 58px;
+        font-weight: 600;
+        color: #1e3a8a;
+      }
+      .comparison-track {
+        display: inline-block;
+        height: 10px;
+        width: min(180px, 38vw);
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .comparison-fill {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #2563eb, #22c55e);
+        border-radius: inherit;
+      }
+      .comparison-value {
+        color: #475569;
+        font-size: 0.8rem;
+      }
       .docid {
         font-weight: 600;
         color: #2563eb;
@@ -191,6 +238,7 @@
     </div>
 
     <p class="qrels-summary" id="qrelsSummary"></p>
+    <div id="comparison"></div>
     <div class="cols" id="results"></div>
     <div class="trace" id="trace"></div>
 
@@ -198,6 +246,7 @@
       const statusEl = document.getElementById("status");
       const resultsEl = document.getElementById("results");
       const traceEl = document.getElementById("trace");
+      const comparisonEl = document.getElementById("comparison");
       const qrelsSummaryEl = document.getElementById("qrelsSummary");
       const qEl = document.getElementById("q");
       const goBtn = document.getElementById("go");
@@ -327,6 +376,7 @@
         goBtn.disabled = true;
         resultsEl.innerHTML = '<p class="loading">Running query...</p>';
         traceEl.innerHTML = "";
+        comparisonEl.innerHTML = "";
         qrelsSummaryEl.textContent = "";
         try {
           const r = await fetch("/query", {
@@ -363,6 +413,7 @@
               data.latency_ms.glove,
             ) +
             docCard("Agentic Search", data.agentic, data.latency_ms.agentic);
+          comparisonEl.innerHTML = data.search_comparison_html || "";
           traceEl.innerHTML = traceHtml(data.agentic_explanation);
           qrelsSummaryEl.textContent = data.qrels_available
             ? `qrels: ${data.num_relevant_in_qrels} doc(s) judged relevant for this query (qid=${selectedQid})`
