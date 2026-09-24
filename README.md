@@ -8,7 +8,8 @@
 4. **Word Embeddings** (baseline)
 5. **Dense Search** (baseline)
 6. **Agentic Search** (proposed framework)
-LLM plan → retrieve → fuse/re-rank → judge → reformulate → retry, with iterative query self-correction
+
+    LLM plan -> retrieve -> fuse/re-rank -> judge -> reformulate -> retry, with iterative query self-correction
 
 ## Prepare the .env file
 Edit parameters as shown in .env.example
